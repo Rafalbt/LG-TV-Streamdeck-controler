@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <title>LG TV — Zmień źródło</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      font-size: 12px;
+      color: #ccc;
+      background: transparent;
+      margin: 8px;
+    }
+    label { display: block; margin-top: 10px; margin-bottom: 3px; color: #aaa; }
+    input, select {
+      width: 100%;
+      background: #1a1a2e;
+      border: 1px solid #444;
+      color: #fff;
+      padding: 5px 7px;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+    input:focus, select:focus { outline: none; border-color: #0078d4; }
+    input[readonly] { color: #888; cursor: default; }
+    .hint { color: #666; font-size: 10px; margin-top: 3px; }
+    .row { display: flex; gap: 6px; margin-top: 10px; }
+    .row select { flex: 1; }
+    button {
+      background: #0078d4;
+      border: none;
+      color: #fff;
+      padding: 5px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    button:hover { background: #106ebe; }
+    button:disabled { background: #444; cursor: default; }
+    #status { margin-top: 6px; font-size: 11px; min-height: 14px; }
+    .ok  { color: #4ec94e; }
+    .err { color: #e05050; }
+    .section { margin-top: 14px; border-top: 1px solid #333; padding-top: 10px; }
+  </style>
+</head>
+<body>
+
+  <label>Adres IP telewizora</label>
+  <input type="text" id="ip" placeholder="np. 192.168.1.100" />
+
+  <label>Client Key (auto po sparowaniu)</label>
+  <input type="text" id="clientKey" readonly placeholder="(brak)" />
+
+  <div class="section">
+    <label>Wejście</label>
+    <div class="row">
+      <select id="inputId">
+        <option value="">— naciśnij Odśwież —</option>
+      </select>
+      <button id="refresh">Odśwież</button>
+    </div>
+    <div id="status"></div>
+    <div class="hint">
+      Odśwież pobiera listę wejść bezpośrednio z TV.<br>
+      TV musi być <strong>włączony</strong>. Przy pierwszym razie zaakceptuj prompt na TV.
+    </div>
+  </div>
+
+  <script>
+    let ws, uuid, settings = {};
+
+    function connectElgatoStreamDeckSocket(port, pluginUUID, registerEvent) {
+      uuid = pluginUUID;
+      ws = new WebSocket("ws://127.0.0.1:" + port);
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ event: registerEvent, uuid: pluginUUID }));
+        ws.send(JSON.stringify({ event: "getSettings", context: uuid }));
+      };
+
+      ws.onmessage = (evt) => {
+        const data = JSON.parse(evt.data);
+
+        if (data.event === "didReceiveSettings") {
+          settings = data.payload?.settings ?? {};
+          document.getElementById("ip").value        = settings.ip        ?? "";
+          document.getElementById("clientKey").value = settings.clientKey ?? "";
+          if (settings.inputId) {
+            ensureOption(settings.inputId, settings.inputLabel || settings.inputId);
+            document.getElementById("inputId").value = settings.inputId;
+          }
+        }
+
+        if (data.event === "sendToPropertyInspector") {
+          const payload = data.payload;
+          if (payload.error) {
+            setStatus(payload.error, "err");
+            setRefreshState(false);
+            return;
+          }
+          if (payload.inputs) {
+            populateInputs(payload.inputs);
+            setRefreshState(false);
+            setStatus("Pobrano " + payload.inputs.length + " wejść.", "ok");
+            setTimeout(() => setStatus(""), 2000);
+          }
+        }
+      };
+    }
+
+    function ensureOption(id, label) {
+      const sel = document.getElementById("inputId");
+      if (!sel.querySelector(`option[value="${id}"]`)) {
+        const opt = document.createElement("option");
+        opt.value = id;
+        opt.textContent = label;
+        sel.appendChild(opt);
+      }
+    }
+
+    function populateInputs(inputs) {
+      const sel = document.getElementById("inputId");
+      const current = sel.value;
+      sel.innerHTML = '<option value="">— wybierz —</option>';
+      for (const inp of inputs) {
+        const opt = document.createElement("option");
+        opt.value = inp.id;
+        opt.textContent = inp.label + (inp.connected ? "" : " (brak sygnału)");
+        sel.appendChild(opt);
+      }
+      if (current) sel.value = current;
+    }
+
+    function setRefreshState(loading) {
+      document.getElementById("refresh").disabled = loading;
+      document.getElementById("refresh").textContent = loading ? "…" : "Odśwież";
+    }
+
+    function setStatus(msg, cls = "") {
+      const el = document.getElementById("status");
+      el.textContent = msg;
+      el.className = cls;
+    }
+
+    function save() {
+      settings.ip = document.getElementById("ip").value.trim();
+      const sel = document.getElementById("inputId");
+      settings.inputId    = sel.value;
+      settings.inputLabel = sel.options[sel.selectedIndex]?.textContent?.replace(/ \(brak sygnału\)$/, "") ?? sel.value;
+      if (ws) ws.send(JSON.stringify({ event: "setSettings", context: uuid, payload: settings }));
+    }
+
+    document.getElementById("ip").addEventListener("change", save);
+    document.getElementById("inputId").addEventListener("change", save);
+
+    document.getElementById("refresh").addEventListener("click", () => {
+      const ip = document.getElementById("ip").value.trim();
+      if (!ip) { setStatus("Najpierw wpisz adres IP.", "err"); return; }
+      save();
+      setRefreshState(true);
+      setStatus("Pobieranie listy wejść…");
+      ws.send(JSON.stringify({
+        event: "sendToPlugin",
+        context: uuid,
+        payload: { event: "getInputList" },
+      }));
+    });
+  </script>
+</body>
+</html>

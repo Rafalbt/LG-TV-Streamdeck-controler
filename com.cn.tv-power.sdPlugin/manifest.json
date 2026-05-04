@@ -1,0 +1,36 @@
+{
+  "Author": "ContentNetworks",
+  "CodePath": "bin/plugin.js",
+  "Description": "Włącza i wyłącza TV LG OLED jednym przyciskiem (WoL + webOS API)",
+  "Icon": "imgs/plugin-icon",
+  "Name": "LG TV Power",
+  "Actions": [
+    {
+      "Icon": "imgs/action-icon",
+      "Name": "Toggle Power",
+      "PropertyInspectorPath": "ui/index.html",
+      "States": [
+        { "Image": "imgs/state-off", "Name": "Wyłączony" },
+        { "Image": "imgs/state-on",  "Name": "Włączony" }
+      ],
+      "SupportedInMultiActions": false,
+      "UUID": "com.cn.tv-power.toggle"
+    },
+    {
+      "Icon": "imgs/action-icon",
+      "Name": "Switch Input",
+      "PropertyInspectorPath": "ui/switch-input.html",
+      "States": [
+        { "Image": "imgs/action-icon", "Name": "Input" }
+      ],
+      "SupportedInMultiActions": true,
+      "UUID": "com.cn.tv-power.switch-input"
+    }
+  ],
+  "SDKVersion": 2,
+  "Software": { "MinimumVersion": "6.4" },
+  "Version": "1.0.0",
+  "OS": [
+    { "Platform": "windows", "MinimumVersion": "10" }
+  ]
+}

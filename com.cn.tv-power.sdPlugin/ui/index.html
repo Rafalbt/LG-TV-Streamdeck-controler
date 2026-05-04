@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <title>LG TV Power — Ustawienia</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      font-size: 12px;
+      color: #ccc;
+      background: transparent;
+      margin: 8px;
+    }
+    label { display: block; margin-top: 10px; margin-bottom: 3px; color: #aaa; }
+    input {
+      width: 100%;
+      background: #1a1a2e;
+      border: 1px solid #444;
+      color: #fff;
+      padding: 5px 7px;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+    input:focus { outline: none; border-color: #0078d4; }
+    input[readonly] { color: #888; cursor: default; }
+    .hint { color: #666; font-size: 10px; margin-top: 3px; }
+    .section { margin-top: 14px; border-top: 1px solid #333; padding-top: 10px; }
+    button {
+      margin-top: 10px;
+      width: 100%;
+      background: #0078d4;
+      border: none;
+      color: #fff;
+      padding: 6px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    button:hover { background: #106ebe; }
+    #status { margin-top: 6px; font-size: 11px; min-height: 14px; }
+    .ok  { color: #4ec94e; }
+    .err { color: #e05050; }
+  </style>
+</head>
+<body>
+
+  <label>Adres IP telewizora</label>
+  <input type="text" id="ip" placeholder="np. 192.168.1.100" />
+
+  <label>MAC Address (do Wake-on-LAN)</label>
+  <input type="text" id="mac" placeholder="np. A0:B1:C2:D3:E4:F5" />
+  <div class="hint">Znajdziesz w ustawieniach TV → Ogólne → Informacje o sieci</div>
+
+  <div class="section">
+    <label>Client Key (wypełnia się automatycznie po sparowaniu)</label>
+    <input type="text" id="clientKey" readonly placeholder="(brak — zaakceptuj prompt na TV)" />
+    <div class="hint">Przy pierwszym naciśnięciu na TV pojawi się prośba o zezwolenie — zatwierdź pilotem.</div>
+    <button id="clearKey">Wyczyść klucz (wymuś ponowne parowanie)</button>
+    <div id="status"></div>
+  </div>
+
+  <script>
+    let ws, uuid, settings = {};
+
+    function connectElgatoStreamDeckSocket(port, pluginUUID, registerEvent) {
+      uuid = pluginUUID;
+      ws = new WebSocket("ws://127.0.0.1:" + port);
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ event: registerEvent, uuid: pluginUUID }));
+        ws.send(JSON.stringify({ event: "getSettings", context: uuid }));
+      };
+
+      ws.onmessage = (evt) => {
+        const data = JSON.parse(evt.data);
+        if (data.event === "didReceiveSettings") {
+          settings = data.payload?.settings ?? {};
+          document.getElementById("ip").value        = settings.ip        ?? "";
+          document.getElementById("mac").value       = settings.mac       ?? "";
+          document.getElementById("clientKey").value = settings.clientKey ?? "";
+        }
+      };
+    }
+
+    function save() {
+      settings.ip  = document.getElementById("ip").value.trim();
+      settings.mac = document.getElementById("mac").value.trim().toUpperCase();
+      if (ws) ws.send(JSON.stringify({ event: "setSettings", context: uuid, payload: settings }));
+    }
+
+    document.getElementById("ip").addEventListener("change", save);
+    document.getElementById("mac").addEventListener("change", save);
+
+    document.getElementById("clearKey").addEventListener("click", () => {
+      settings.clientKey = "";
+      document.getElementById("clientKey").value = "";
+      if (ws) ws.send(JSON.stringify({ event: "setSettings", context: uuid, payload: settings }));
+      document.getElementById("status").textContent = "Klucz wyczyszczony.";
+      document.getElementById("status").className = "ok";
+      setTimeout(() => { document.getElementById("status").textContent = ""; }, 2000);
+    });
+  </script>
+</body>
+</html>
